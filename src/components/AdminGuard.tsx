@@ -2,45 +2,58 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { auth } from '@/lib/firebase/config';
-import { isSuperAdmin } from '@/lib/firebase/admin';
-import { Container, Loader, Text, Center } from '@mantine/core';
+import { Loader, Center, Text } from '@mantine/core';
 
 interface AdminGuardProps {
   children: React.ReactNode;
 }
 
 export default function AdminGuard({ children }: AdminGuardProps) {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAuthorized, setIsAuthorized] = useState(true); // Set to true by default
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
-    // Skip all checks temporarily
-    setIsLoading(false);
-    setIsAuthorized(true);
+    // التحقق مما إذا كان المستخدم مسؤولاً
+    const checkAdmin = () => {
+      try {
+        const isAdminUser = localStorage.getItem('isAdmin') === 'true';
+        console.log('Is admin check:', isAdminUser);
+        setIsAdmin(isAdminUser);
+      } catch (error) {
+        console.error('Error checking admin status:', error);
+        setIsAdmin(false);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkAdmin();
   }, []);
 
-  if (isLoading) {
+  // إذا كان جاري التحميل، اعرض مؤشر التحميل
+  if (loading) {
     return (
-      <Container size="sm" py="xl">
-        <Center style={{ minHeight: '50vh' }}>
-          <Loader size="xl" />
-        </Center>
-      </Container>
+      <Center style={{ height: '100vh' }}>
+        <Loader size="xl" />
+      </Center>
     );
   }
 
-  if (!isAuthorized) {
+  // إذا لم يكن المستخدم مسؤولاً، قم بتوجيهه إلى صفحة تسجيل الدخول
+  if (!isAdmin) {
+    // استخدم setTimeout لتجنب خطأ "Text content does not match server-rendered HTML"
+    setTimeout(() => {
+      router.push('/admin/login');
+    }, 0);
+    
     return (
-      <Container size="sm" py="xl">
-        <Center style={{ minHeight: '50vh' }}>
-          <Text size="xl" fw={500}>
-            غير مصرح لك بالوصول إلى هذه الصفحة
-          </Text>
-        </Center>
-      </Container>
+      <Center style={{ height: '100vh' }}>
+        <Text>غير مصرح لك بالوصول. جاري التوجيه...</Text>
+      </Center>
     );
   }
 
+  // إذا كان المستخدم مسؤولاً، اعرض المحتوى
   return <>{children}</>;
 } 

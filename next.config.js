@@ -14,9 +14,6 @@ try {
 
 const nextConfig = {
   reactStrictMode: true,
-  experimental: {
-    appDir: true,
-  },
   images: {
     domains: ['firebasestorage.googleapis.com', 'image.tmdb.org'],
   },

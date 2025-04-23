@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { 
   User,
   signInWithEmailAndPassword,
@@ -16,36 +16,54 @@ import {
 import { auth } from '@/lib/firebase';
 
 interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
-  signOut: () => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
-  signInAnonymously: () => Promise<void>;
+  currentUser: User | null;
+  isAdmin: boolean;
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  setAdminStatus: (status: boolean) => void;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
+const AuthContext = createContext<AuthContextType>({
+  currentUser: null,
+  isAdmin: false,
+  isLoading: true,
+  login: async () => {},
+  logout: async () => {},
+  setAdminStatus: () => {},
+});
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+export const useAuth = () => useContext(AuthContext);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Set persistence to LOCAL
     setPersistence(auth, browserLocalPersistence).catch(console.error);
 
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      console.log('Auth state changed:', currentUser?.uid);
-      setUser(currentUser);
-      setLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      console.log('Auth state changed:', user?.uid);
+      setCurrentUser(user);
+      
+      // التحقق من حالة المسؤول من localStorage
+      try {
+        const isAdminUser = localStorage.getItem('isAdmin') === 'true';
+        setIsAdmin(isAdminUser);
+      } catch (error) {
+        console.error('Error checking admin status:', error);
+      }
+      
+      setIsLoading(false);
     });
 
     // Check if there's a user in localStorage
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       try {
-        setUser(JSON.parse(storedUser));
+        setCurrentUser(JSON.parse(storedUser));
       } catch (error) {
         console.error('Error parsing stored user:', error);
         localStorage.removeItem('user');
@@ -55,73 +73,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const login = async (email: string, password: string) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      setUser(userCredential.user);
+      // إذا كان البريد الإلكتروني يحتوي على "admin"، نعتبره مسؤولاً
+      // (هذا للتبسيط فقط، في التطبيق الحقيقي يجب التحقق من الصلاحيات من قاعدة البيانات)
+      const isAdminUser = email.includes('admin');
+      setIsAdmin(isAdminUser);
+      localStorage.setItem('isAdmin', isAdminUser.toString());
       localStorage.setItem('user', JSON.stringify(userCredential.user));
+      return userCredential;
     } catch (error) {
-      console.error('Sign in error:', error);
+      console.error('Login error:', error);
       throw error;
     }
   };
 
-  const signUp = async (email: string, password: string) => {
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      setUser(userCredential.user);
-      localStorage.setItem('user', JSON.stringify(userCredential.user));
-    } catch (error) {
-      console.error('Sign up error:', error);
-      throw error;
-    }
-  };
-
-  const signOut = async () => {
+  const logout = async () => {
     try {
       await firebaseSignOut(auth);
-      setUser(null);
+      localStorage.removeItem('isAdmin');
       localStorage.removeItem('user');
+      setIsAdmin(false);
     } catch (error) {
-      console.error('Sign out error:', error);
+      console.error('Logout error:', error);
       throw error;
     }
   };
 
-  const signInWithGoogle = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      const userCredential = await signInWithPopup(auth, provider);
-      setUser(userCredential.user);
-      localStorage.setItem('user', JSON.stringify(userCredential.user));
-    } catch (error) {
-      console.error('Google sign in error:', error);
-      throw error;
-    }
-  };
-
-  const signInAnonymously = async () => {
-    try {
-      const userCredential = await firebaseSignInAnonymously(auth);
-      setUser(userCredential.user);
-      localStorage.setItem('user', JSON.stringify(userCredential.user));
-    } catch (error) {
-      console.error('Anonymous sign in error:', error);
-      throw error;
-    }
+  const setAdminStatus = (status: boolean) => {
+    setIsAdmin(status);
+    localStorage.setItem('isAdmin', status.toString());
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, signInWithGoogle, signInAnonymously }}>
+    <AuthContext.Provider value={{
+      currentUser,
+      isAdmin,
+      isLoading,
+      login,
+      logout,
+      setAdminStatus,
+    }}>
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 } 
