@@ -1,10 +1,16 @@
 /** @type {import('next').NextConfig} */
-const withPWA = require('next-pwa')({
-  dest: 'public',
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development'
-});
+let withPWA = config => config;
+
+try {
+  withPWA = require('next-pwa')({
+    dest: 'public',
+    register: true,
+    skipWaiting: true,
+    disable: process.env.NODE_ENV === 'development'
+  });
+} catch (e) {
+  console.warn('Could not load next-pwa, continuing without it.');
+}
 
 const nextConfig = {
   reactStrictMode: true,
